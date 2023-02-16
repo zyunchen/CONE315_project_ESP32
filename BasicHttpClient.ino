@@ -6,15 +6,19 @@
  */
 
 #include <Arduino.h>
-
 #include <WiFi.h>
 #include <WiFiMulti.h>
-
 #include <HTTPClient.h>
-
+#include <Arduino_JSON.h>
 #define USE_SERIAL Serial
 
-WiFiMulti wifiMulti;
+const char* ssid = "iPhone";
+const char* password = "67843209";
+
+const char* serverName = "https://catfact.ninja/fact";
+
+
+// WiFiMulti wifiMulti;
 
 /*
 const char* ca = \ 
@@ -47,57 +51,149 @@ const char* ca = \
 "-----END CERTIFICATE-----\n";
 */
 
-void setup() {
 
-    USE_SERIAL.begin(115200);
 
-    USE_SERIAL.println();
-    USE_SERIAL.println();
-    USE_SERIAL.println();
+// the following variables are unsigned longs because the time, measured in
+// milliseconds, will quickly become a bigger number than can be stored in an int.
+unsigned long lastTime = 0;
+// Timer set to 10 minutes (600000)
+//unsigned long timerDelay = 600000;
+// Set timer to 5 seconds (5000)
+unsigned long timerDelay = 5000;
 
-    for(uint8_t t = 4; t > 0; t--) {
-        USE_SERIAL.printf("[SETUP] WAIT %d...\n", t);
-        USE_SERIAL.flush();
-        delay(1000);
-    }
+String sensorReadings;
+String sensorReadingsArr[3];
 
-    wifiMulti.addAP("iPhone", "67843209");
 
+
+
+String httpGETRequest(const char* serverName) {
+  // WiFiClient client;
+  HTTPClient http;
+    
+  // Your Domain name with URL path or IP address with path
+  // http.begin(client, serverName);
+  http.begin(serverName);
+
+
+  
+  
+  // If you need Node-RED/server authentication, insert user and password below
+  //http.setAuthorization("REPLACE_WITH_SERVER_USERNAME", "REPLACE_WITH_SERVER_PASSWORD");
+  
+  // Send HTTP POST request
+  int httpResponseCode = http.GET();
+  
+  String payload = "{}"; 
+  
+  if (httpResponseCode>0) {
+    Serial.print("HTTP Response code: ");
+    Serial.println(httpResponseCode);
+    payload = http.getString();
+  }
+  else {
+    Serial.print("Error code: ");
+    Serial.println(httpResponseCode);
+  }
+  // Free resources
+  http.end();
+
+  return payload;
 }
 
+void setup() {
+  Serial.begin(115200);
+
+  WiFi.begin(ssid, password);
+  Serial.println("Connecting");
+  while(WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.print("Connected to WiFi network with IP Address: ");
+  Serial.println(WiFi.localIP());
+ 
+  Serial.println("Timer set to 5 seconds (timerDelay variable), it will take 5 seconds before publishing the first reading.");
+}
+
+// void loop() {
+//     // wait for WiFi connection
+//     if((wifiMulti.run() == WL_CONNECTED)) {
+
+//         HTTPClient http;
+
+//         USE_SERIAL.print("[HTTP] begin...\n");
+//         // configure traged server and url
+//         //http.begin("https://www.howsmyssl.com/a/check", ca); //HTTPS
+//         http.begin(serverName); //HTTP
+
+//         USE_SERIAL.print("[HTTP] GET...\n");
+//         // start connection and send HTTP header
+//         int httpCode = http.GET();
+
+//         // httpCode will be negative on error
+//         if(httpCode > 0) {
+//             // HTTP header has been send and Server response header has been handled
+//             USE_SERIAL.printf("[HTTP] GET... code: %d\n", httpCode);
+//             USE_SERIAL.printf("[HTTP] GET... code: %d\n", http.header("location"));
+
+
+//             // file found at server
+//             if(httpCode == HTTP_CODE_OK) {
+//                 String payload = http.getString();
+//                 USE_SERIAL.println(payload);
+//             }
+//         } else {
+//             USE_SERIAL.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
+//         }
+
+//         http.end();
+//     }
+
+//     delay(5000);
+// }
+
+
 void loop() {
-    // wait for WiFi connection
-    if((wifiMulti.run() == WL_CONNECTED)) {
-
-        HTTPClient http;
-
-        USE_SERIAL.print("[HTTP] begin...\n");
-        // configure traged server and url
-        //http.begin("https://www.howsmyssl.com/a/check", ca); //HTTPS
-        http.begin("https://catfact.ninja/fact"); //HTTP
-
-        USE_SERIAL.print("[HTTP] GET...\n");
-        // start connection and send HTTP header
-        int httpCode = http.GET();
-
-        // httpCode will be negative on error
-        if(httpCode > 0) {
-            // HTTP header has been send and Server response header has been handled
-            USE_SERIAL.printf("[HTTP] GET... code: %d\n", httpCode);
-            USE_SERIAL.printf("[HTTP] GET... code: %d\n", http.header("location"));
-
-
-            // file found at server
-            if(httpCode == HTTP_CODE_OK) {
-                String payload = http.getString();
-                USE_SERIAL.println(payload);
-            }
-        } else {
-            USE_SERIAL.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
-        }
-
-        http.end();
+  //Send an HTTP POST request every 10 minutes
+  if ((millis() - lastTime) > timerDelay) {
+    //Check WiFi connection status
+    if(WiFi.status()== WL_CONNECTED){
+              
+      sensorReadings = httpGETRequest(serverName);
+      Serial.println(sensorReadings);
+      JSONVar myObject = JSON.parse(sensorReadings);
+  
+      // JSON.typeof(jsonVar) can be used to get the type of the var
+      if (JSON.typeof(myObject) == "undefined") {
+        Serial.println("Parsing input failed!");
+        return;
+      }
+    
+      Serial.print("JSON object = ");
+      Serial.println(myObject);
+    
+      // myObject.keys() can be used to get an array of all the keys in the object
+      JSONVar keys = myObject.keys();
+    
+      for (int i = 0; i < keys.length(); i++) {
+        JSONVar value = myObject[keys[i]];
+        Serial.print(keys[i]);
+        Serial.print(" = ");
+        Serial.println(value);
+        sensorReadingsArr[i] = (const char*)value;
+      }
+      Serial.print("1 = ");
+      Serial.println(sensorReadingsArr[0]);
+      Serial.print("2 = ");
+      Serial.println(sensorReadingsArr[1]);
+      Serial.print("3 = ");
+      Serial.println(sensorReadingsArr[2]);
     }
-
-    delay(5000);
+    else {
+      Serial.println("WiFi Disconnected");
+    }
+    lastTime = millis();
+  }
 }
