@@ -41,11 +41,14 @@ String sensorReadings;
 String sensorReadingsArr[3];
 
  
-const int AirValue = 3300;   //this value is when the humidity sensor put in the air
-const int WaterValue = 1700;  //this value is when the humidity sensor put in the water
+const int AIR_VALUE = 3300;   //this value is when the humidity sensor put in the air
+const int WATER_VALUE = 1700;  //this value is when the humidity sensor put in the water
 const int SensorPin = 34;
 int soilMoistureValue = 0;
 int soilmoisturepercent=0;
+
+int wateringThreshold = 15; // this is the threshold humidity, if the humidity below this, watering begin.
+
 
 
 
@@ -103,14 +106,14 @@ void setup() {
 }
 
 
-void sendHumidty(){
+void sendHumidty(int humidity){
   HTTPClient http;
   // Your Domain name with URL path or IP address with path
   http.begin(serverName);
   // Specify content-type header to json
   http.addHeader("Content-Type", "application/json");
   // Data to send with HTTP POST
-  int httpResponseCode = http.POST("{\"humdity\":\"15%\"}");
+  int httpResponseCode = http.POST("{\"humdity\":\"" + String(humidity) + "\"}");
 
   String playload = "{}"; 
   if (httpResponseCode>0) {
@@ -185,38 +188,9 @@ void sendHumidty(){
   
 }
 
-void watering(){
-  // set pump and  led on 
-  digitalWrite(PUMP, HIGH);
-  digitalWrite(LED, HIGH);
-
-  // set watering time 
-  delay(5000);
-  
-  // set pump and led off
-  digitalWrite(PUMP, LOW);
-  digitalWrite(LED, LOW);
-}
-
-
-void loop() {
-  //Send an HTTP POST request every 10 minutes
-  if ((millis() - lastTime) > timerDelay) {
-    //Check WiFi connection status
-    if(WiFi.status()== WL_CONNECTED){
-      sendHumidty();
-    }
-    else {
-      Serial.println("WiFi Disconnected");
-    }
-    lastTime = millis();
-  }
-
+int getHumidity(){
   soilMoistureValue = analogRead(SensorPin);  //put Sensor insert into soil
-  Serial.println(soilMoistureValue);
-  delay(1000);
-
-  soilmoisturepercent = map(soilMoistureValue, AirValue, WaterValue, 0, 100);
+  soilmoisturepercent = map(soilMoistureValue, AIR_VALUE, WATER_VALUE, 0, 100);
   if(soilmoisturepercent > 100)
   {
     Serial.println("100 %");
@@ -230,6 +204,66 @@ void loop() {
     Serial.print(soilmoisturepercent);
     Serial.println("%");
   }  
+
+  return soilmoisturepercent;
+}
+
+
+
+void beginWatering(){
+  // set pump and  led on 
+  digitalWrite(PUMP, HIGH);
+  digitalWrite(LED, HIGH);
+  sendHumidty(getHumidity());
+  
+  
+}
+
+void stopWatering(){
+  // set pump and led off
+  digitalWrite(PUMP, LOW);
+  digitalWrite(LED, LOW); 
+  sendHumidty(getHumidity()); 
+}
+
+
+
+
+
+
+
+
+void ifShouldWater(int curHumidity){
+  if (curHumidity < wateringThreshold){
+    beginWatering();
+    while(1){
+      delay(500);
+      curHumidity = getHumidity();
+      if (curHumidity > (wateringThreshold + 20) or curHumidity > 90){   
+        stopWatering();   
+      }   
+    }
+  }
+    
+  
+
+}
+
+
+void loop() {
+  //Send an HTTP POST request every 10 minutes
+  if ((millis() - lastTime) > timerDelay) {
+    //Check WiFi connection status
+    if(WiFi.status()== WL_CONNECTED){
+      sendHumidty(getHumidity());
+    }
+    else {
+      Serial.println("WiFi Disconnected");
+    }
+    lastTime = millis();
+  }
+
+  
 
 
 }
