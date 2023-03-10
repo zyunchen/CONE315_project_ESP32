@@ -12,6 +12,7 @@
 #include <Arduino_JSON.h>
 #include <SPI.h>
 #include <Wire.h> 
+#include <string> 
 
 #define USE_SERIAL Serial
 
@@ -113,7 +114,8 @@ void sendHumidty(int humidity){
   // Specify content-type header to json
   http.addHeader("Content-Type", "application/json");
   // Data to send with HTTP POST
-  int httpResponseCode = http.POST("{\"humdity\":\"" + String(humidity) + "\"}");
+
+  int httpResponseCode = http.POST(("{\"humdity\":\"" + std::to_string(humidity) + "\"}").c_str());
 
   String playload = "{}"; 
   if (httpResponseCode>0) {
@@ -194,21 +196,22 @@ int getHumidity(){
   if(soilmoisturepercent > 100)
   {
     Serial.println("100 %");
+    return 100;
   }
   else if(soilmoisturepercent <0)
   {
     Serial.println("0 %");
+    return 0;
   }
   else if(soilmoisturepercent >=0 && soilmoisturepercent <= 100)
   {
     Serial.print(soilmoisturepercent);
     Serial.println("%");
+    return soilmoisturepercent;
   }  
 
-  return soilmoisturepercent;
+  
 }
-
-
 
 void beginWatering(){
   // set pump and  led on 
@@ -225,13 +228,6 @@ void stopWatering(){
   digitalWrite(LED, LOW); 
   sendHumidty(getHumidity()); 
 }
-
-
-
-
-
-
-
 
 void ifShouldWater(int curHumidity){
   if (curHumidity < wateringThreshold){
@@ -263,7 +259,5 @@ void loop() {
     lastTime = millis();
   }
 
-  
-
-
+ 
 }
