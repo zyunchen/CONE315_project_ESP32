@@ -11,21 +11,20 @@
 #include <HTTPClient.h>
 #include <Arduino_JSON.h>
 #include <SPI.h>
-#include <Wire.h>
- 
-// #define SCREEN_WIDTH 128 // OLED display width, in pixels    TO DELETE
-// #define SCREEN_HEIGHT 64 // OLED display height, in pixels   TO DELETE
-// #define OLED_RESET -1 // Reset pin # (or -1 if sharing Arduino reset pin)   TO DELETE
-
+#include <Wire.h> 
 
 #define USE_SERIAL Serial
 
-const char* ssid = "iPhone";
-const char* password = "67843209";
+const char* ssid = "OpenWrt24";
+const char* password = "17708499678cyk!";
 
-const char* serverName = "https://catfact.ninja/fact";
+const char* serverName = "http://192.168.1.249:8086/smartnode/humidity";
+// String serverName = "http://192.168.1.106:1880/update-sensor";
 
 
+
+#define LED 4   
+#define PUMP 22
 
 
 
@@ -88,6 +87,9 @@ String httpGETRequest(const char* serverName) {
 void setup() {
   Serial.begin(115200); // open serial port, set the baud rate to 115200
 
+  pinMode(LED, OUTPUT);
+  pinMode(PUMP, OUTPUT);
+
   WiFi.begin(ssid, password);
   Serial.println("Connecting");
   while(WiFi.status() != WL_CONNECTED) {
@@ -101,42 +103,108 @@ void setup() {
 }
 
 
+void sendHumidty(){
+  HTTPClient http;
+  // Your Domain name with URL path or IP address with path
+  http.begin(serverName);
+  // Specify content-type header to json
+  http.addHeader("Content-Type", "application/json");
+  // Data to send with HTTP POST
+  int httpResponseCode = http.POST("{\"humdity\":\"15%\"}");
+
+  String playload = "{}"; 
+  if (httpResponseCode>0) {
+    Serial.print("HTTP Response code: ");
+    Serial.println(httpResponseCode);
+    playload = http.getString();
+    Serial.println(playload);
+    
+  }
+  else {
+    Serial.print("Error code: ");
+    Serial.println(httpResponseCode);
+  }
+  // Free resources
+  http.end();
+
+
+
+      // sensorReadings = httpGETRequest(serverName);
+      // Serial.println(sensorReadings);
+      // JSONVar myObject = JSON.parse(sensorReadings);
+  
+      // // JSON.typeof(jsonVar) can be used to get the type of the var
+      // if (JSON.typeof(myObject) == "undefined") {
+      //   Serial.println("Parsing input failed!");
+      //   return;
+      // }
+    
+      // Serial.print("JSON object = ");
+      // Serial.println(myObject);
+    
+      // // myObject.keys() can be used to get an array of all the keys in the object
+      // JSONVar keys = myObject.keys();
+    
+      // for (int i = 0; i < keys.length(); i++) {
+      //   JSONVar value = myObject[keys[i]];
+      //   Serial.print(keys[i]);
+      //   Serial.print(" = ");
+      //   Serial.println(value);
+      //   sensorReadingsArr[i] = (const char*)value;
+      // }
+      // Serial.print("1 = ");
+      // Serial.println(sensorReadingsArr[0]);
+      // Serial.print("2 = ");
+      // Serial.println(sensorReadingsArr[1]);
+      // Serial.print("3 = ");
+      // Serial.println(sensorReadingsArr[2]);
+
+
+
+  //   if (JSON.typeof(myObject) == "undefined") {
+  //   Serial.println("Parsing input failed!");
+  //   return;
+  // }
+  // Serial.print("JSON object = ");
+  // Serial.println(myObject);
+  // // myObject.keys() can be used to get an array of all the keys in the object
+  // JSONVar keys = myObject.keys();
+  // for (int i = 0; i < keys.length(); i++) {
+  //   JSONVar value = myObject[keys[i]];
+  //   Serial.print(keys[i]);
+  //   Serial.print(" = ");
+  //   Serial.println(value);
+  //   sensorReadingsArr[i] = double(value);
+  // }
+  // Serial.print("1 = ");
+  // Serial.println(sensorReadingsArr[0]);
+  // Serial.print("2 = ");
+  // Serial.println(sensorReadingsArr[1]);
+  // Serial.print("3 = ");
+  // Serial.println(sensorReadingsArr[2]);
+  
+}
+
+void watering(){
+  // set pump and  led on 
+  digitalWrite(PUMP, HIGH);
+  digitalWrite(LED, HIGH);
+
+  // set watering time 
+  delay(5000);
+  
+  // set pump and led off
+  digitalWrite(PUMP, LOW);
+  digitalWrite(LED, LOW);
+}
+
 
 void loop() {
   //Send an HTTP POST request every 10 minutes
   if ((millis() - lastTime) > timerDelay) {
     //Check WiFi connection status
     if(WiFi.status()== WL_CONNECTED){
-              
-      sensorReadings = httpGETRequest(serverName);
-      Serial.println(sensorReadings);
-      JSONVar myObject = JSON.parse(sensorReadings);
-  
-      // JSON.typeof(jsonVar) can be used to get the type of the var
-      if (JSON.typeof(myObject) == "undefined") {
-        Serial.println("Parsing input failed!");
-        return;
-      }
-    
-      Serial.print("JSON object = ");
-      Serial.println(myObject);
-    
-      // myObject.keys() can be used to get an array of all the keys in the object
-      JSONVar keys = myObject.keys();
-    
-      for (int i = 0; i < keys.length(); i++) {
-        JSONVar value = myObject[keys[i]];
-        Serial.print(keys[i]);
-        Serial.print(" = ");
-        Serial.println(value);
-        sensorReadingsArr[i] = (const char*)value;
-      }
-      Serial.print("1 = ");
-      Serial.println(sensorReadingsArr[0]);
-      Serial.print("2 = ");
-      Serial.println(sensorReadingsArr[1]);
-      Serial.print("3 = ");
-      Serial.println(sensorReadingsArr[2]);
+      sendHumidty();
     }
     else {
       Serial.println("WiFi Disconnected");
