@@ -13,13 +13,15 @@
 #include <SPI.h>
 #include <Wire.h> 
 #include <string> 
+#include <esp_mac.h>
+#include <time.h>
 
 #define USE_SERIAL Serial
 
 const char* ssid = "OpenWrt24";
 const char* password = "17708499678cyk!";
 
-const char* serverName = "http://192.168.1.249:8086/smartnode/humidity";
+const char* serverName = "http://110.40.205.204:8086/sensor/changeSensorData";
 // String serverName = "http://192.168.1.106:1880/update-sensor";
 
 
@@ -40,6 +42,9 @@ unsigned long timerDelay = 5000;
 
 String sensorReadings;
 String sensorReadingsArr[3];
+
+char macAddress[13];
+int  status = 0; // 0 is no water, 1 is watering
 
  
 const int AIR_VALUE = 3300;   //this value is when the humidity sensor put in the air
@@ -94,6 +99,17 @@ void setup() {
   pinMode(LED, OUTPUT);
   pinMode(PUMP, OUTPUT);
 
+  Serial.println("mac address is");
+  
+  uint8_t mac_address[6];
+  esp_read_mac(mac_address,ESP_MAC_WIFI_STA);
+  
+  Serial.printf("%02x:%02x:%02x:%02x:%02x:%02x", mac_address[0], mac_address[1], mac_address[2], mac_address[3], mac_address[4], mac_address[5]);
+
+  sprintf(macAddress, "%02x%02x%02x%02x%02x%02x", mac_address[0], mac_address[1], mac_address[2], mac_address[3], mac_address[4], mac_address[5]);
+  Serial.println(macAddress);
+  
+
   WiFi.begin(ssid, password);
   Serial.println("Connecting");
   while(WiFi.status() != WL_CONNECTED) {
@@ -115,7 +131,11 @@ void sendHumidty(int humidity){
   http.addHeader("Content-Type", "application/json");
   // Data to send with HTTP POST
 
-  int httpResponseCode = http.POST(("{\"humdity\":\"" + std::to_string(humidity) + "\"}").c_str());
+  std::string mac = macAddress;
+
+  Serial.println(("{\"sensorId\":\"" + mac + "\",\"currentHumidity\":\"" + std::to_string(humidity) + "\",\"status\":" + std::to_string(status) + "}").c_str());
+
+  int httpResponseCode = http.POST(("{\"sensorId\":\"" + mac + "\",\"currentHumidity\":\"" + std::to_string(humidity) + "\",\"status\":" + std::to_string(status) + "}").c_str());
 
   String playload = "{}"; 
   if (httpResponseCode>0) {
@@ -123,6 +143,7 @@ void sendHumidty(int humidity){
     Serial.println(httpResponseCode);
     playload = http.getString();
     Serial.println(playload);
+    // TODO: deal with the wateringThreshold
     
   }
   else {
@@ -215,21 +236,29 @@ int getHumidity(){
 
 void beginWatering(){
   // set pump and  led on 
+  Serial.println("func beginWateringr");
   digitalWrite(PUMP, HIGH);
   digitalWrite(LED, HIGH);
+  status = 1;
   sendHumidty(getHumidity());
+  
   
   
 }
 
 void stopWatering(){
   // set pump and led off
+  Serial.println("func stopWatering");
   digitalWrite(PUMP, LOW);
   digitalWrite(LED, LOW); 
+  status = 0;
   sendHumidty(getHumidity()); 
+  
 }
 
 void ifShouldWater(int curHumidity){
+  Serial.println("func isShouldWater");
+
   if (curHumidity < wateringThreshold){
     beginWatering();
     while(1){
@@ -248,6 +277,8 @@ void ifShouldWater(int curHumidity){
 
 void loop() {
   //Send an HTTP POST request every 10 minutes
+  ifShouldWater(getHumidity());
+  delay(1000);
   if ((millis() - lastTime) > timerDelay) {
     //Check WiFi connection status
     if(WiFi.status()== WL_CONNECTED){
