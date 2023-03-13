@@ -15,21 +15,26 @@
 #include <string> 
 #include <esp_mac.h>
 #include <time.h>
+#include <WiFiClient.h>
+#include <WiFiAP.h>
+
+
+// Set these to your desired credentials.
+const char *open_ssid = "smart_plant_care";
+const char *open_password = "Smartplant";
+
+WiFiServer server(80);
 
 #define USE_SERIAL Serial
 
-const char* ssid = "OpenWrt24";
-const char* password = "17708499678cyk!";
+// const char* ssid = "OpenWrt24";
+// const char* password = "17708499678cyk";
 
 const char* serverName = "http://110.40.205.204:8086/sensor/changeSensorData";
 // String serverName = "http://192.168.1.106:1880/update-sensor";
 
-
-
 #define LED 4   
 #define PUMP 22
-
-
 
 
 // the following variables are unsigned longs because the time, measured in
@@ -46,7 +51,6 @@ String sensorReadingsArr[3];
 char macAddress[13];
 int  status = 0; // 0 is no water, 1 is watering
 
- 
 const int AIR_VALUE = 3300;   //this value is when the humidity sensor put in the air
 const int WATER_VALUE = 1700;  //this value is when the humidity sensor put in the water
 const int SensorPin = 34;
@@ -54,9 +58,6 @@ int soilMoistureValue = 0;
 int soilmoisturepercent=0;
 
 int wateringThreshold = 15; // this is the threshold humidity, if the humidity below this, watering begin.
-
-
-
 
 
 String httpGETRequest(const char* serverName) {
@@ -67,9 +68,6 @@ String httpGETRequest(const char* serverName) {
   // http.begin(client, serverName);
   http.begin(serverName);
 
-
-  
-  
   // If you need Node-RED/server authentication, insert user and password below
   //http.setAuthorization("REPLACE_WITH_SERVER_USERNAME", "REPLACE_WITH_SERVER_PASSWORD");
   
@@ -109,17 +107,13 @@ void setup() {
   sprintf(macAddress, "%02x%02x%02x%02x%02x%02x", mac_address[0], mac_address[1], mac_address[2], mac_address[3], mac_address[4], mac_address[5]);
   Serial.println(macAddress);
   
-
-  WiFi.begin(ssid, password);
-  Serial.println("Connecting");
-  while(WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("");
-  Serial.print("Connected to WiFi network with IP Address: ");
-  Serial.println(WiFi.localIP());
-  Serial.println("Timer set to 5 seconds (timerDelay variable), it will take 5 seconds before publishing the first reading.");
+  // start wifi server to let user set the wifi name and password that esp32 to connect to 
+  WiFi.softAP(open_ssid,open_password);
+  IPAddress myIP = WiFi.softAPIP();
+  Serial.print("AP IP address: ");
+  Serial.println(myIP);
+  server.begin();
+  Serial.println("Server started");
 }
 
 
@@ -157,63 +151,6 @@ void sendHumidty(int humidity){
   }
   // Free resources
   http.end();
-
-
-
-      // sensorReadings = httpGETRequest(serverName);
-      // Serial.println(sensorReadings);
-      // JSONVar myObject = JSON.parse(sensorReadings);
-  
-      // // JSON.typeof(jsonVar) can be used to get the type of the var
-      // if (JSON.typeof(myObject) == "undefined") {
-      //   Serial.println("Parsing input failed!");
-      //   return;
-      // }
-    
-      // Serial.print("JSON object = ");
-      // Serial.println(myObject);
-    
-      // // myObject.keys() can be used to get an array of all the keys in the object
-      // JSONVar keys = myObject.keys();
-    
-      // for (int i = 0; i < keys.length(); i++) {
-      //   JSONVar value = myObject[keys[i]];
-      //   Serial.print(keys[i]);
-      //   Serial.print(" = ");
-      //   Serial.println(value);
-      //   sensorReadingsArr[i] = (const char*)value;
-      // }
-      // Serial.print("1 = ");
-      // Serial.println(sensorReadingsArr[0]);
-      // Serial.print("2 = ");
-      // Serial.println(sensorReadingsArr[1]);
-      // Serial.print("3 = ");
-      // Serial.println(sensorReadingsArr[2]);
-
-
-
-  //   if (JSON.typeof(myObject) == "undefined") {
-  //   Serial.println("Parsing input failed!");
-  //   return;
-  // }
-  // Serial.print("JSON object = ");
-  // Serial.println(myObject);
-  // // myObject.keys() can be used to get an array of all the keys in the object
-  // JSONVar keys = myObject.keys();
-  // for (int i = 0; i < keys.length(); i++) {
-  //   JSONVar value = myObject[keys[i]];
-  //   Serial.print(keys[i]);
-  //   Serial.print(" = ");
-  //   Serial.println(value);
-  //   sensorReadingsArr[i] = double(value);
-  // }
-  // Serial.print("1 = ");
-  // Serial.println(sensorReadingsArr[0]);
-  // Serial.print("2 = ");
-  // Serial.println(sensorReadingsArr[1]);
-  // Serial.print("3 = ");
-  // Serial.println(sensorReadingsArr[2]);
-  
 }
 
 int getHumidity(){
@@ -235,8 +172,6 @@ int getHumidity(){
     Serial.println("%");
     return soilmoisturepercent;
   }  
-
-  
 }
 
 void beginWatering(){
@@ -246,9 +181,6 @@ void beginWatering(){
   digitalWrite(LED, HIGH);
   status = 1;
   sendHumidty(getHumidity());
-  
-  
-  
 }
 
 void stopWatering(){
@@ -258,7 +190,6 @@ void stopWatering(){
   digitalWrite(LED, LOW); 
   status = 0;
   sendHumidty(getHumidity()); 
-  
 }
 
 void ifShouldWater(int curHumidity){
@@ -275,13 +206,123 @@ void ifShouldWater(int curHumidity){
       }   
     }
   }
-    
-  
-
 }
 
+void setupWIFI(WiFiClient *client, String &requestLine){
+  // [GET /setup?] = 11, [ HTTP/1.1] = 9
+  requestLine = requestLine.substring(11, requestLine.length() - 9);
+
+  String name = "";
+  String pwd = "";
+  while(1){
+    int idx = requestLine.indexOf("&");
+    String params;
+    if(idx == -1){
+      params = requestLine;
+      requestLine = "";
+    }else{
+      params = requestLine.substring(0, idx);
+      requestLine = requestLine.substring(idx + 1);      
+    }
+    
+    idx = params.indexOf("=");
+    if(idx == -1) break;
+    String key = params.substring(0, idx);
+    String value = params.substring(idx + 1);
+    if(key == "name"){
+      name = value;
+    }else if(key == "password"){
+      pwd = value;
+    }
+  }
+  if(name == "") return;
+
+  if(pwd == ""){
+    WiFi.begin(name.c_str());
+  }else{
+    WiFi.begin(name.c_str(), pwd.c_str());
+  }
+
+  Serial.println("name: [" + name + "]");
+  Serial.println("pwd: [" + pwd + "]");
+
+  Serial.println("Connecting to an internet wifi...");
+  while(WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.print("Connected to an internet WiFi with IP Address: ");
+  Serial.println(WiFi.localIP());
+  Serial.println("Timer set to 5 seconds (timerDelay variable), it will take 5 seconds before publishing the first reading.");
+
+  while(client->available()){
+    client->read();
+  }
+
+  client->println("HTTP/1.1 200 OK");
+  client->println("Content-type:text/html");
+  client->println();
+  
+  // The HTTP response ends with another blank line:
+  client->println("Connected to an internet WiFi with IP Address: ");
+  client->println(WiFi.localIP());
+  client->println();
+  client->flush();
+  client->stop();
+  delay(2000);
+  WiFi.softAPdisconnect(true);
+}
+
+void serverLoop(){
+  WiFiClient client = server.available();   // listen for incoming clients
+  if (!client) return;
+  
+  Serial.println("New Client.");           // print a message out the serial port
+  String currentLine = "";                // make a String to hold incoming data from the client
+  while (client.connected()) {            // loop while the client's connected
+    if (!client.available()) continue;
+    
+    char c = client.read();             // read a byte, then
+    Serial.write(c);                    // print it out the serial monitor
+    if (c == '\n') {                    // if the byte is a newline character
+      // if the current line is blank, you got two newline characters in a row.
+      // that's the end of the client HTTP request, so send a response:
+      if(currentLine.startsWith("GET /setup?")){
+        setupWIFI(&client, currentLine);
+        return;
+      }else if (currentLine.length() == 0) {
+        // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
+        // and a content-type so the client knows what's coming, then a blank line:
+        client.println("HTTP/1.1 200 OK");
+        client.println("Content-type:text/html");
+        client.println();
+        
+        // The HTTP response ends with another blank line:
+        client.println("<html><style>input[type=\"text\"] {    font-size:3em;}input[type=\"submit\"] {    font-size:3em;}label{ font-size:3em;}</style><body align =\"center\"><h1>Setup an internet WIFI</h1><form action=\"/setup\" method=\"GET\">  <label for=\"name\">WIFI name:</label><br>  <input type=\"text\" id=\"name\" name=\"name\" height=\"100\"><br>  <label for=\"password\">WIFI Password:</label><br>  <input type=\"text\" id=\"password\" name=\"password\"><br><br>  <input type=\"submit\" value=\"Submit\"></form> </body></html>");
+        // break out of the while loop:
+        break;
+      } else {    // if you got a newline, then clear currentLine:
+        currentLine = "";
+      }
+    } else if (c != '\r') {  // if you got anything else but a carriage return character,
+      currentLine += c;      // add it to the end of the currentLine
+    }
+    // Check to see if the client request was "GET /H" or "GET /L":
+    if (currentLine.endsWith("GET /on1")) {
+      digitalWrite(LED_BUILTIN, HIGH);               // GET /H turns the LED on
+    }
+    if (currentLine.endsWith("GET /off1")) {
+      digitalWrite(LED_BUILTIN, LOW);                // GET /L turns the LED off
+    }
+  }
+  // close the connection:
+  client.stop();
+  Serial.println("Client Disconnected.");
+}
 
 void loop() {
+  serverLoop();
   //Send an HTTP POST request every 10 minutes
   ifShouldWater(getHumidity());
   delay(1000);
@@ -295,6 +336,4 @@ void loop() {
     }
     lastTime = millis();
   }
-
- 
 }
