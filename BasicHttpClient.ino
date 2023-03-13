@@ -143,6 +143,11 @@ void sendHumidty(int humidity){
     Serial.println(httpResponseCode);
     playload = http.getString();
     Serial.println(playload);
+    
+    JSONVar myObject = JSON.parse(playload);
+    //Serial.println();
+    wateringThreshold = myObject["data"]["threshold"];
+    Serial.printf("wateringThreshold: %d\n",  wateringThreshold);
     // TODO: deal with the wateringThreshold
     
   }
@@ -266,6 +271,7 @@ void ifShouldWater(int curHumidity){
       curHumidity = getHumidity();
       if (curHumidity > (wateringThreshold + 20) or curHumidity > 90){   
         stopWatering();   
+        break;
       }   
     }
   }
